@@ -252,7 +252,9 @@ def forecast(reads):
         dist_by_uid[uid] = dist
 
     # Name a game at a place only while its probability beats the unnamed
-    # share that place would otherwise spread over the games left unnamed.
+    # share that place would otherwise spread over the games left unnamed,
+    # and clears the MIN_ROW_P floor. Below that floor, naming adds noise
+    # the log score punishes more than the unnamed share costs.
     probabilities = {place: {} for place in range(1, 11)}
     for place in range(1, 11):
         ranked = sorted(
