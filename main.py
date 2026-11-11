@@ -120,13 +120,16 @@ def build_histograms(reads, last_time):
 
 def smoothed_bin_distributions(hist):
     """For every (bin, start rank), the kernel-smoothed future-rank
-    distribution (sums to 1 over ranks 1..MAX_RANK)."""
+    distribution (sums to 1 over ranks 1..MAX_RANK). Returns (dists, obs):
+    obs[(bin, start rank)] is the total paired weight behind that
+    distribution, so callers can widen the pool when data is thin."""
     kernel = [
         [math.exp(-0.5 * ((k - fr) / KERNEL_SD) ** 2) for fr in range(1, MAX_RANK + 1)]
         for k in range(1, MAX_RANK + 1)
     ]
     dists = {}
-    for (b, r0), (counts, _exit_w, _total_w) in hist.items():
+    obs = {}
+    for (b, r0), (counts, _exit_w, total_w) in hist.items():
         tot = sum(counts.values())
         if tot <= 0:
             continue
@@ -142,28 +145,36 @@ def smoothed_bin_distributions(hist):
         if total <= 0:
             continue
         dists[(b, r0)] = [v / total for v in raw]
-    return dists
+        obs[(b, r0)] = total_w
+    return dists, obs
 
 
-def game_distribution(uid, rank0, hist, dists, exit_rates):
-    """Time-averaged future-rank distribution for one game."""
+def game_distribution(uid, rank0, hist, dists, exit_rates, obs):
+    """Time-averaged future-rank distribution for one game. Start ranks
+    are pooled within +-HALFWIN; the pool widens (up to +-8) until it
+    rests on at least MIN_OBS paired observations, so sparse ranks do
+    not get a kernel built on a handful of pairs."""
     dist = [0.0] * (MAX_RANK + 1)
     for b in range(len(BINS)):
-        obs = None
-        for halfwin in (HALFWIN, HALFWIN + 3):
+        chosen = None
+        for halfwin in (HALFWIN, HALFWIN + 3, HALFWIN + 6):
             pool = []
+            pool_obs = 0.0
             for r in range(max(1, rank0 - halfwin), min(MAX_RANK, rank0 + halfwin) + 1):
                 d = dists.get((b, r))
                 if d is not None:
                     pool.append(d)
-            if pool:
-                obs = pool
+                    pool_obs += obs.get((b, r), 0.0)
+            if not pool:
+                continue
+            chosen = pool
+            if pool_obs >= MIN_OBS:
                 break
-        if not obs:
+        if not chosen:
             continue
         w = BIN_HOURS[b] / WINDOW_HOURS
         for k in range(1, MAX_RANK + 1):
-            dist[k] += w * sum(d[k] for d in obs) / len(obs)
+            dist[k] += w * sum(d[k] for d in chosen) / len(chosen)
     # Rescale to (1 - exit rate): mass lost to games leaving the chart.
     total = sum(dist[1:])
     if total <= 0:
@@ -226,13 +237,13 @@ def forecast(reads):
     games = sorted(last_chart.values(), key=lambda r: r["rank"])
     n_chart = len(games)
     hist = build_histograms(reads, last_time)
-    dists = smoothed_bin_distributions(hist)
+    dists, obs = smoothed_bin_distributions(hist)
     exit_rates = exit_rates_by_rank(hist)
 
     dist_by_uid = {}
     for game in games:
         uid = game["universe_id"]
-        dist = game_distribution(uid, game["rank"], hist, dists, exit_rates)
+        dist = game_distribution(uid, game["rank"], hist, dists, exit_rates, obs)
         if dist is None:
             continue
         factor = presence_factor(uid, last, last_time)
