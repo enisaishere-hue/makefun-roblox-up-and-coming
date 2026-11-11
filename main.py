@@ -43,7 +43,7 @@ BINS = [(0.0, 12.0), (12.0, 24.0), (24.0, 48.0), (48.0, 72.0)]
 BIN_HOURS = [12.0, 12.0, 24.0, 24.0]
 WINDOW_HOURS = 72.0
 
-HALFWIN = 2            # pool start ranks within +-2 (widened to +-5 if too few)
+HALFWIN = 2            # pool start ranks within +-2; widen to +-5, then +-8, until MIN_OBS paired observations
 KERNEL_SD = 1.5        # Gaussian smoothing over future ranks, in ranks
 BACKGROUND = 0.01      # uniform mass mixed into every distribution
 RECENCY_HALFLIFE_H = 72.0
