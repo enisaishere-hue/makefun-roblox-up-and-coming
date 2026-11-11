@@ -269,8 +269,8 @@ def forecast(reads):
         expected_place[uid] = (
             sum(place * dist[place] for place in range(1, 11)) / m if m > 0 else 99.0
         )
-    leaders = sorted(mass, key=lambda u: -mass[u])[:15]
-    top10 = sorted(leaders, key=lambda u: expected_place[u])[:10]
+    leaders = sorted(mass, key=lambda u: -mass[u])[:10]
+    top10 = sorted(leaders, key=lambda u: expected_place[u])
     return probabilities, top10
 
 
